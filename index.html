@@ -610,7 +610,8 @@
         + '<div class="field"><label>緯度 lat</label><input type="number" step="0.000001" id="tfLat" value="'+(t.lat??'')+'"></div>'
         + '<div class="field"><label>經度 lng</label><input type="number" step="0.000001" id="tfLng" value="'+(t.lng??'')+'"></div>'
       + '</div>'
-      + '<button class="icon-btn primary" style="margin-bottom:12px;" onclick="App.useCurrentLocation()">使用目前位置設為錨點</button>'
+      + '<button class="icon-btn primary" id="tfLocateBtn" style="margin-bottom:6px;" onclick="App.useCurrentLocation()">使用目前位置設為錨點</button>'
+      + '<div class="hint" id="tfLocateStatus" style="margin-bottom:10px;"></div>'
       + '<div class="field"><label>判定半徑（公尺）</label><input type="number" id="tfRadius" value="'+t.radius+'"></div>'
       + '<div class="form-actions">'
         + '<button class="btn primary" onclick="App.saveTag()">儲存</button>'
@@ -660,7 +661,7 @@
           + '<input type="text" id="rfCity" list="cityList" value="'+escapeAttr(r.city)+'">'
           + '<datalist id="cityList">'+CITY_OPTIONS.map(c=>'<option value="'+c+'">').join('')+'</datalist>'
         + '</div>'
-        + '<div class="field"><label>路線名稱</label><input type="text" id="rfRoute" value="'+escapeAttr(r.routeName)+'" placeholder="例如：0東 / 657"></div>'
+        + '<div class="field"><label>路線名稱（一次只能填一條）</label><input type="text" id="rfRoute" value="'+escapeAttr(r.routeName)+'" placeholder="例如：657"><div class="hint">要追蹤多條公車，請分開新增多筆路線，不要用「/」把兩個號碼寫在同一格。</div></div>'
       + '</div>'
       + '<div class="field"><label>站牌名稱關鍵字（選填，留空代表不篩選站牌）</label><input type="text" id="rfStop" value="'+escapeAttr(r.stopKeyword)+'" placeholder="例如：三張犁"></div>'
       + '<div class="field"><label>方向</label><select id="rfDirection">'
@@ -729,10 +730,17 @@
     },
     useCurrentLocation(){
       if(!('geolocation' in navigator)){ alert('此瀏覽器不支援定位'); return; }
+      const setStatus = (msg)=>{ const s=document.getElementById('tfLocateStatus'); if(s) s.textContent = msg; };
+      setStatus('定位中…（室內、第一次定位可能要 20～30 秒，請耐心等候）');
       navigator.geolocation.getCurrentPosition(pos=>{
-        document.getElementById('tfLat').value = pos.coords.latitude.toFixed(6);
-        document.getElementById('tfLng').value = pos.coords.longitude.toFixed(6);
-      }, err=>{ alert('無法取得目前位置：'+err.message); }, {enableHighAccuracy:true, timeout:10000});
+        const latEl = document.getElementById('tfLat'), lngEl = document.getElementById('tfLng');
+        if(!latEl || !lngEl) return; // 表單已關閉就不處理，避免噴錯
+        latEl.value = pos.coords.latitude.toFixed(6);
+        lngEl.value = pos.coords.longitude.toFixed(6);
+        setStatus('已取得目前位置。');
+      }, err=>{
+        setStatus('定位逾時或失敗（'+err.message+'）。可以再按一次重試；有時定位其實還在背景進行，稍等一下欄位可能還是會自動填上。');
+      }, {enableHighAccuracy:true, timeout:25000, maximumAge:0});
     },
     saveTag(){
       const name = document.getElementById('tfName').value.trim();
