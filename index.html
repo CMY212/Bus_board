@@ -432,25 +432,38 @@
     return res.json();
   }
 
+  function isIntercity(city){
+    return String(city||'').trim().toLowerCase() === 'intercity';
+  }
+
   async function fetchRouteEta(city, routeName){
-    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/'
-      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
+    const url = isIntercity(city)
+      ? 'https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity/'
+        + encodeURIComponent(routeName) + '?$top=300&$format=JSON'
+      : 'https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/'
+        + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
     return tdxGet(url, city+'/'+routeName);
   }
 
   // 依關鍵字搜尋路線（供新增路線時的自動完成使用）
   async function searchRoutesByKeyword(city, keyword){
     const filter = "contains(RouteName/Zh_tw,'" + keyword.replace(/'/g,"''") + "')";
-    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/'
-      + encodeURIComponent(city) + '?$filter=' + encodeURIComponent(filter) + '&$top=12&$format=JSON';
+    const url = isIntercity(city)
+      ? 'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity'
+        + '?$filter=' + encodeURIComponent(filter) + '&$top=12&$format=JSON'
+      : 'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/'
+        + encodeURIComponent(city) + '?$filter=' + encodeURIComponent(filter) + '&$top=12&$format=JSON';
     return tdxGet(url, '路線搜尋');
   }
 
   // 取得指定路線各方向的站序，供方向標示（往○○）與站牌搜尋使用
   // 明確指定 $top，避免 TDX 預設只回傳 30 筆造成長路線被截斷
   async function fetchStopsOfRoute(city, routeName){
-    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/'
-      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
+    const url = isIntercity(city)
+      ? 'https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity/'
+        + encodeURIComponent(routeName) + '?$top=300&$format=JSON'
+      : 'https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/'
+        + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
     return tdxGet(url, '站牌資料');
   }
 
@@ -669,7 +682,7 @@
         return '<div class="row">'
           + '<div class="left">'
             + '<div class="route-label">'+escapeHtml(routeDisplayLabel(r))+'</div>'
-            + '<div class="route-sub">'+escapeHtml([r.city, r.stopKeyword].filter(Boolean).join(' · '))+(best.sub?(' · '+escapeHtml(best.sub)):'')+'</div>'
+            + '<div class="route-sub">'+escapeHtml([cityDisplayName(r.city), r.stopKeyword].filter(Boolean).join(' · '))+(best.sub?(' · '+escapeHtml(best.sub)):'')+'</div>'
           + '</div>'
           + '<div class="right">'+rightHtml+'</div>'
           + '</div>';
@@ -730,7 +743,7 @@
       return '<div class="card">'
         + '<div class="card-top">'
           + '<div><div class="card-title">'+escapeHtml(routeDisplayLabel(r))+'</div>'
-          + '<div class="card-meta">'+escapeHtml(r.city)+' · '+dirLabel
+          + '<div class="card-meta">'+escapeHtml(cityDisplayName(r.city))+' · '+dirLabel
           + (r.stopKeyword?(' · 站名含「'+escapeHtml(r.stopKeyword)+'」'):'')
           + '<br>'+(tagNames.length? tagNames.map(n=>'<span class="tag-pill">'+escapeHtml(n)+'</span>').join('') : '<span style="color:var(--muted)">尚未指定地點標籤</span>')
           + '</div></div>'
@@ -745,7 +758,11 @@
     }).join('');
   }
 
-  const CITY_OPTIONS = ['Taipei','NewTaipei','Taoyuan','Taichung','Tainan','Kaohsiung','Keelung','HsinchuCity','HsinchuCounty','ChanghuaCounty','YunlinCounty','PingtungCounty','YilanCounty','HualienCounty','TaitungCounty'];
+  const CITY_OPTIONS = ['Taipei','NewTaipei','Taoyuan','Taichung','Tainan','Kaohsiung','Keelung','HsinchuCity','HsinchuCounty','ChanghuaCounty','YunlinCounty','PingtungCounty','YilanCounty','HualienCounty','TaitungCounty','Intercity'];
+
+  function cityDisplayName(city){
+    return isIntercity(city) ? '公路／國道客運' : city;
+  }
 
   // ---- 新增路線表單：搜尋選路線 → 依真實站牌資料挑方向/站牌 ----
 
@@ -754,6 +771,7 @@
       + '<div class="field"><label>縣市代碼</label>'
         + '<input type="text" id="rfCity" list="cityList" value="'+escapeAttr(rfState.city)+'" oninput="App.onCityChange(this.value)">'
         + '<datalist id="cityList">'+CITY_OPTIONS.map(c=>'<option value="'+c+'">').join('')+'</datalist>'
+        + '<div class="hint">市區公車填縣市代碼（例如 Taipei、NewTaipei）；如果是公路／國道客運（跨縣市的客運，例如編號較長的國道班車），縣市代碼請填「Intercity」。</div>'
       + '</div>'
       + '<div class="field"><label>公車路線</label><div id="rfRouteSearchWrap">'+renderRouteSearchAreaHtml()+'</div></div>'
       + '<div class="field"><label>方向</label><div id="rfDirectionArea">'+renderDirectionAreaHtml()+'</div></div>'
@@ -830,7 +848,7 @@
     }
     let html = '<div class="checks">'+chips+'</div>';
     if(s.stopsError){
-      html += '<div class="hint" style="color:var(--danger)">方向／站牌資料讀取失敗：'+escapeHtml(s.stopsError)+'，可以先用上面的通用選項，或到下面手動輸入站名關鍵字。</div>';
+      html += '<div class="hint" style="color:var(--danger)">方向／站牌資料讀取失敗：'+escapeHtml(s.stopsError)+'。如果這條路線其實是公路／國道客運（跨縣市行駛），常見原因是縣市代碼要填「Intercity」而不是特定縣市——可以按「變更」重選，把縣市代碼改成 Intercity 再搜尋一次；不行的話也可以先用上面的通用選項，或到下面手動輸入站名關鍵字。</div>';
     }
     return html;
   }
