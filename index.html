@@ -316,6 +316,8 @@
   let lastErrors = [];
   let lastUpdated = null;
   let loading = false;
+  let refreshInFlight = false;
+  let refreshQueued = false;
   let refreshTimer = null;
   let editingTagId = null;
   let editingRouteId = null;
@@ -407,6 +409,8 @@
     return token.accessToken;
   }
 
+  function sleepMs(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
   async function tdxGet(url, errLabel){
     let token = await getAccessToken(false);
     let res = await fetch(url, {headers:{Authorization:'Bearer '+token}});
@@ -414,13 +418,23 @@
       token = await getAccessToken(true);
       res = await fetch(url, {headers:{Authorization:'Bearer '+token}});
     }
+    if(res.status===429){
+      // TDX 限流，通常是短暫的，等一下再試一次
+      const retryAfterHeader = res.headers && res.headers.get && res.headers.get('Retry-After');
+      const waitMs = retryAfterHeader ? Math.min(10000, Number(retryAfterHeader)*1000 || 1500) : 1500;
+      await sleepMs(waitMs);
+      res = await fetch(url, {headers:{Authorization:'Bearer '+token}});
+      if(res.status===429){
+        throw new Error((errLabel||'TDX 請求')+' 被限流（429），請稍後再試，或減少同時追蹤的路線數量');
+      }
+    }
     if(!res.ok) throw new Error((errLabel||'TDX 請求')+' 失敗（'+res.status+'）');
     return res.json();
   }
 
   async function fetchRouteEta(city, routeName){
     const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/'
-      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$format=JSON';
+      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
     return tdxGet(url, city+'/'+routeName);
   }
 
@@ -433,20 +447,25 @@
   }
 
   // 取得指定路線各方向的站序，供方向標示（往○○）與站牌搜尋使用
+  // 明確指定 $top，避免 TDX 預設只回傳 30 筆造成長路線被截斷
   async function fetchStopsOfRoute(city, routeName){
     const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/'
-      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$format=JSON';
+      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$top=300&$format=JSON';
     return tdxGet(url, '站牌資料');
   }
 
   // 把 StopOfRoute 回傳整理成 {direction: {names:[依序站名], subRouteName}}
+  // 同一個方向常常會有多筆資料（主線＋不同分支的實跑路線），
+  // 只取站牌數最多的那筆，避免抓到較短的分支，導致「往○○」標錯、站牌搜不到
   function extractStopsByDirection(data){
     const byDir = {};
     (Array.isArray(data)?data:[]).forEach(entry=>{
       const dir = String(entry.Direction);
       const stops = (entry.Stops||[]).slice().sort((a,b)=>(a.StopSequence||0)-(b.StopSequence||0));
       const names = stops.map(s=>(s.StopName && (s.StopName.Zh_tw||s.StopName.Zh)) || '').filter(Boolean);
-      if(names.length){
+      if(!names.length) return;
+      const existing = byDir[dir];
+      if(!existing || names.length > existing.names.length){
         byDir[dir] = {
           direction:dir,
           names,
@@ -485,6 +504,23 @@
   }
 
   async function refreshArrivals(manual){
+    if(refreshInFlight){
+      refreshQueued = true; // 已經有一次在跑，先排隊，等它跑完再補一次就好，不要疊加平行請求
+      return;
+    }
+    refreshInFlight = true;
+    try{
+      await doRefreshArrivals();
+    } finally {
+      refreshInFlight = false;
+      if(refreshQueued){
+        refreshQueued = false;
+        refreshArrivals();
+      }
+    }
+  }
+
+  async function doRefreshArrivals(){
     const displayed = getDisplayedRoutes();
     if(displayed.length===0){ arrivalsData={}; lastErrors=[]; renderHome(); return; }
     loading = true;
@@ -496,7 +532,9 @@
     });
     const errors = [];
     const results = {};
-    await Promise.all(Object.keys(groups).map(async key=>{
+    const keys = Object.keys(groups);
+    await Promise.all(keys.map(async (key, idx)=>{
+      if(idx>0) await sleepMs(idx*200); // 每組請求稍微錯開，避免同時炸出一堆請求觸發限流
       const [city, routeName] = key.split('|');
       const routeDefs = groups[key];
       try{
@@ -844,14 +882,14 @@
     const all = candidateStopNames() || [];
     const q = (s.stopQuery||'').trim();
     const filtered = q ? all.filter(n=>n.includes(q)) : all;
-    const shown = filtered.slice(0,20);
+    const shown = filtered.slice(0,50);
     if(shown.length===0){
       return '<div class="hint">沒有符合的站牌'+(q?'':'（這條路線尚無站牌資料）')+'</div>';
     }
     return '<div class="board" style="margin-top:6px;max-height:220px;overflow:auto;">' + shown.map(n=>
       '<div class="row" style="cursor:pointer;padding:8px 12px;" onclick=\'App.selectStop('+jsAttr(n)+')\'>'+escapeHtml(n)+'</div>'
     ).join('') + '</div>'
-    + (filtered.length>20 ? '<div class="hint">還有 '+(filtered.length-20)+' 筆，輸入更多關鍵字可縮小範圍。</div>' : '');
+    + (filtered.length>50 ? '<div class="hint">還有 '+(filtered.length-50)+' 筆，輸入更多關鍵字可縮小範圍。</div>' : '');
   }
 
   function refreshRouteFormSections(){
