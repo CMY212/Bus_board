@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>站牌 · 公車看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff;
+    --panel:#f6f9f8;
+    --panel-2:#eef4f3;
+    --line:#dbe6e3;
+    --amber:#0f8f80;
+    --amber-dim:#bfe3dd;
+    --text:#1c2624;
+    --muted:#6b7c78;
+    --danger:#c94a3c;
+    --ok:#1f9d6c;
+    --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding-bottom:76px;
+  }
+  .wrap{max-width:480px;margin:0 auto;padding:0 14px;}
+
+  /* ---------- 頂部狀態列 ---------- */
+  header.top{
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.9));
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+    padding:14px 0 10px;
+  }
+  .brand{
+    display:flex;align-items:baseline;justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .brand h1{
+    font-size:15px;font-weight:700;letter-spacing:.4px;margin:0;color:var(--text);
+  }
+  .brand .sub{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex:0 0 auto;
+    font-family:var(--sans);
+    font-size:13px;
+    padding:6px 12px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--muted);
+    white-space:nowrap;
+    position:relative;
+    cursor:pointer;
+    user-select:none;
+  }
+  .chip.selected{border-color:var(--amber);color:var(--amber);background:rgba(15,143,128,.08);}
+  .chip .dot{
+    display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--ok);margin-left:6px;vertical-align:middle;
+  }
+  .geo-note{font-size:11px;color:var(--danger);margin-top:6px;}
+
+  /* ---------- 主要內容 ---------- */
+  main{padding-top:14px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .updated-row{
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:11px;color:var(--muted);font-family:var(--mono);
+    margin-bottom:10px;
+  }
+  .updated-row button{
+    font-family:var(--sans);font-size:12px;color:var(--amber);
+    background:none;border:1px solid var(--amber-dim);border-radius:8px;
+    padding:4px 10px;cursor:pointer;
+  }
+
+  .empty{
+    text-align:center;color:var(--muted);padding:56px 20px;
+    border:1px dashed var(--line);border-radius:var(--r);
+  }
+  .empty .big{font-size:14px;color:var(--text);margin-bottom:6px;}
+  .empty button{
+    margin-top:14px;background:var(--amber);color:#ffffff;border:none;
+    font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer;
+  }
+
+  .error-banner{
+    background:rgba(201,74,60,.08);border:1px solid var(--danger);
+    color:var(--danger);font-size:12px;padding:8px 10px;border-radius:8px;
+    margin-bottom:10px;
+  }
+
+  /* ---------- 公車列 (LED看板風格) ---------- */
+  .board{
+    border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+    background:var(--panel);
+  }
+  .row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:13px 14px;border-bottom:1px solid var(--line);
+    gap:10px;
+  }
+  .row:last-child{border-bottom:none;}
+  .row .left{min-width:0;}
+  .route-label{font-size:15px;font-weight:700;color:var(--text);}
+  .route-sub{font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row .right{text-align:right;flex:0 0 auto;}
+  .countdown{
+    font-family:var(--mono);font-weight:700;font-size:22px;color:var(--amber);
+    line-height:1;
+  }
+  .countdown.soon{color:var(--danger);}
+  .countdown.muted{font-size:13px;color:var(--muted);font-weight:500;}
+  .unit{font-size:11px;color:var(--muted);margin-left:2px;font-family:var(--sans);}
+  .status-text{font-size:11px;color:var(--muted);margin-top:2px;}
+
+  /* ---------- 卡片 (標籤/路線 管理) ---------- */
+  .section-title{
+    font-size:13px;color:var(--muted);margin:18px 0 8px;font-family:var(--mono);
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    padding:12px 14px;margin-bottom:10px;
+  }
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .card-title{font-size:14px;font-weight:700;}
+  .card-meta{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
+  .tag-pill{
+    display:inline-block;font-size:11px;color:var(--amber);border:1px solid var(--amber-dim);
+    border-radius:999px;padding:2px 8px;margin:4px 4px 0 0;
+  }
+  .card-actions{display:flex;gap:8px;flex:0 0 auto;}
+  .icon-btn{
+    background:none;border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:var(--sans);
+  }
+  .icon-btn.danger{color:var(--danger);border-color:rgba(201,74,60,.4);}
+  .icon-btn.primary{color:var(--amber);border-color:var(--amber-dim);}
+
+  /* ---------- 表單 ---------- */
+  .form{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px;margin-bottom:14px;
+  }
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .field input[type=text], .field input[type=number], .field select{
+    width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:9px 10px;font-size:14px;font-family:var(--sans);
+  }
+  .field input:focus, .field select:focus{outline:1px solid var(--amber);border-color:var(--amber);}
+  .row2{display:flex;gap:10px;}
+  .row2 .field{flex:1;}
+  .checks{display:flex;flex-wrap:wrap;gap:8px;}
+  .check{
+    font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+    color:var(--muted);cursor:pointer;user-select:none;
+  }
+  .check.on{border-color:var(--amber);color:var(--amber);background:rgba(15,143,128,.08);}
+  .form-actions{display:flex;gap:8px;margin-top:4px;}
+  .btn{
+    border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;
+    cursor:pointer;font-family:var(--sans);
+  }
+  .btn.primary{background:var(--amber);color:#ffffff;}
+  .btn.ghost{background:none;border:1px solid var(--line);color:var(--muted);}
+  .btn.block{width:100%;}
+  .hint{font-size:11px;color:var(--muted);line-height:1.6;margin-top:4px;}
+  .hint a{color:var(--amber);}
+
+  .fab-add{
+    width:100%;padding:12px;border-radius:var(--r);border:1px dashed var(--amber-dim);
+    background:none;color:var(--amber);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px;
+  }
+
+  /* ---------- 底部導覽 ---------- */
+  nav.bottom{
+    position:fixed;bottom:0;left:0;right:0;z-index:20;
+    background:rgba(255,255,255,.98);backdrop-filter:blur(6px);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.bottom button{
+    flex:1;background:none;border:none;color:var(--muted);
+    font-family:var(--sans);font-size:12px;padding:12px 0 10px;cursor:pointer;
+    border-top:2px solid transparent;
+  }
+  nav.bottom button.active{color:var(--amber);border-top-color:var(--amber);}
+
+  .settings-danger{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>站牌</h1>
+      <span class="sub" id="clock">--:--</span>
+    </div>
+    <div class="chips" id="tagChips"></div>
+    <div class="geo-note" id="geoNote" style="display:none;"></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 首頁：公車看板 -->
+  <section class="view active" id="view-home">
+    <div class="updated-row">
+      <span id="updatedText">尚未更新</span>
+      <button onclick="App.refreshArrivals(true)">立即更新</button>
+    </div>
+    <div id="errorBanner"></div>
+    <div id="homeContent"></div>
+  </section>
+
+  <!-- 標籤管理 -->
+  <section class="view" id="view-tags">
+    <div class="section-title">地點標籤</div>
+    <p class="hint">標籤代表一個地點（例如學校、家裡）。手機定位進入標籤的範圍時，會自動把它設為生效中的地點；上方也可以手動點選覆蓋。</p>
+    <button class="fab-add" onclick="App.showTagForm()">+ 新增地點標籤</button>
+    <div id="tagFormHolder"></div>
+    <div id="tagList"></div>
+  </section>
+
+  <!-- 路線管理 -->
+  <section class="view" id="view-routes">
+    <div class="section-title">公車路線</div>
+    <p class="hint">新增你平常會搭的公車，並指定它要在哪些地點標籤生效時顯示。資料來自 TDX 運輸資料流通服務平台。</p>
+    <button class="fab-add" onclick="App.showRouteForm()">+ 新增公車路線</button>
+    <div id="routeFormHolder"></div>
+    <div id="routeList"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="view" id="view-settings">
+    <div class="section-title">TDX API 金鑰</div>
+    <div class="form">
+      <div class="field">
+        <label>Client ID</label>
+        <input type="text" id="setClientId" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Client Secret</label>
+        <input type="text" id="setClientSecret" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>自動更新間隔（秒，最少 15）</label>
+        <input type="number" id="setInterval" min="15" step="5">
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" onclick="App.saveSettings()">儲存設定</button>
+      </div>
+      <p class="hint">金鑰只會存在這台裝置的瀏覽器裡（localStorage），不會上傳到任何伺服器。<br>
+      還沒申請的話，到 <a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 運輸資料流通服務平台</a> 註冊會員，登入後於「會員中心 → 資料服務 → API 金鑰」建立一組即可取得 Client ID 和 Client Secret。</p>
+    </div>
+
+    <div class="settings-danger">
+      <button class="icon-btn danger" onclick="App.resetAll()">清除所有資料（標籤／路線／金鑰）</button>
+    </div>
+  </section>
+
+</main>
+
+<nav class="bottom">
+  <button class="active" data-view="home" onclick="App.switchView('home')">看板</button>
+  <button data-view="tags" onclick="App.switchView('tags')">地點標籤</button>
+  <button data-view="routes" onclick="App.switchView('routes')">公車路線</button>
+  <button data-view="settings" onclick="App.switchView('settings')">設定</button>
+</nav>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- 儲存輔助 ----------------
+  function loadJSON(key, fallback){
+    try{ const v = localStorage.getItem(key); return v===null ? fallback : JSON.parse(v); }
+    catch(e){ return fallback; }
+  }
+  function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  function uid(){
+    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'id-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
+  }
+
+  // ---------------- 狀態 ----------------
+  let settings = loadJSON('bustag.settings', {clientId:'', clientSecret:'', refreshSeconds:30});
+  let tags = loadJSON('bustag.tags', []);
+  let routes = loadJSON('bustag.routes', []);
+  let manualTagId = loadJSON('bustag.manualTagId', null); // null=自動, '__all__'=強制全部, 否則為 tagId
+
+  let lastPosition = null;
+  let activeTagIds = [];
+  let sessionShowAll = false;
+  let geoStatus = 'pending'; // pending | ok | denied | unsupported
+  let arrivalsData = {};     // routeId -> array | null(錯誤)
+  let lastErrors = [];
+  let lastUpdated = null;
+  let loading = false;
+  let refreshTimer = null;
+  let editingTagId = null;
+  let editingRouteId = null;
+  let rfState = null; // 新增/編輯路線表單的暫存狀態（搜尋結果、已選路線、站牌資料等）
+  let rfSearchTimer = null;
+  let rfStopSearchTimer = null;
+
+  // ---------------- 地理距離 ----------------
+  function distMeters(lat1, lon1, lat2, lon2){
+    const R = 6371000, toRad = d => d*Math.PI/180;
+    const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function computeActiveTagIds(){
+    if(manualTagId){
+      if(manualTagId === '__all__') return tags.map(t=>t.id);
+      return tags.some(t=>t.id===manualTagId) ? [manualTagId] : [];
+    }
+    if(!lastPosition) return [];
+    return tags.filter(t=>
+      typeof t.lat==='number' && typeof t.lng==='number' &&
+      distMeters(lastPosition.lat, lastPosition.lng, t.lat, t.lng) <= t.radius
+    ).map(t=>t.id);
+  }
+
+  function getDisplayedRoutes(){
+    if(sessionShowAll) return routes;
+    if(activeTagIds.length===0) return [];
+    return routes.filter(r => (r.tagIds||[]).some(id => activeTagIds.includes(id)));
+  }
+
+  // ---------------- 地理定位 ----------------
+  function startGeolocation(){
+    if(!('geolocation' in navigator)){ geoStatus='unsupported'; renderTop(); return; }
+    navigator.geolocation.watchPosition(
+      pos=>{
+        geoStatus='ok';
+        lastPosition = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+        recomputeActive();
+      },
+      err=>{ geoStatus='denied'; renderTop(); },
+      {enableHighAccuracy:true, maximumAge:20000, timeout:15000}
+    );
+  }
+
+  async function checkGeoPermissionState(){
+    if(!navigator.permissions || !navigator.permissions.query) return null;
+    try{
+      const st = await navigator.permissions.query({name:'geolocation'});
+      return st.state; // 'granted' | 'denied' | 'prompt'
+    }catch(e){ return null; }
+  }
+
+  function recomputeActive(){
+    const next = computeActiveTagIds();
+    const changed = JSON.stringify([...next].sort()) !== JSON.stringify([...activeTagIds].sort());
+    activeTagIds = next;
+    renderTop();
+    if(changed){
+      sessionShowAll = false;
+      App.refreshArrivals();
+    }
+  }
+
+  // ---------------- TDX API ----------------
+  async function getAccessToken(force){
+    const cached = loadJSON('bustag.token', null);
+    const now = Date.now();
+    if(!force && cached && cached.accessToken && cached.expiresAt > now + 60000){
+      return cached.accessToken;
+    }
+    if(!settings.clientId || !settings.clientSecret){
+      throw new Error('尚未在「設定」填入 TDX Client ID / Secret');
+    }
+    const body = new URLSearchParams({
+      grant_type:'client_credentials',
+      client_id:settings.clientId,
+      client_secret:settings.clientSecret
+    });
+    const res = await fetch('https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token', {
+      method:'POST', body
+    });
+    if(!res.ok) throw new Error('TDX 驗證失敗（'+res.status+'），請檢查 Client ID / Secret');
+    const data = await res.json();
+    const token = {accessToken:data.access_token, expiresAt: now + (data.expires_in ? data.expires_in*1000 : 23*3600*1000)};
+    saveJSON('bustag.token', token);
+    return token.accessToken;
+  }
+
+  async function tdxGet(url, errLabel){
+    let token = await getAccessToken(false);
+    let res = await fetch(url, {headers:{Authorization:'Bearer '+token}});
+    if(res.status===401){
+      token = await getAccessToken(true);
+      res = await fetch(url, {headers:{Authorization:'Bearer '+token}});
+    }
+    if(!res.ok) throw new Error((errLabel||'TDX 請求')+' 失敗（'+res.status+'）');
+    return res.json();
+  }
+
+  async function fetchRouteEta(city, routeName){
+    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/'
+      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$format=JSON';
+    return tdxGet(url, city+'/'+routeName);
+  }
+
+  // 依關鍵字搜尋路線（供新增路線時的自動完成使用）
+  async function searchRoutesByKeyword(city, keyword){
+    const filter = "contains(RouteName/Zh_tw,'" + keyword.replace(/'/g,"''") + "')";
+    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/'
+      + encodeURIComponent(city) + '?$filter=' + encodeURIComponent(filter) + '&$top=12&$format=JSON';
+    return tdxGet(url, '路線搜尋');
+  }
+
+  // 取得指定路線各方向的站序，供方向標示（往○○）與站牌搜尋使用
+  async function fetchStopsOfRoute(city, routeName){
+    const url = 'https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/'
+      + encodeURIComponent(city) + '/' + encodeURIComponent(routeName) + '?$format=JSON';
+    return tdxGet(url, '站牌資料');
+  }
+
+  // 把 StopOfRoute 回傳整理成 {direction: {names:[依序站名], subRouteName}}
+  function extractStopsByDirection(data){
+    const byDir = {};
+    (Array.isArray(data)?data:[]).forEach(entry=>{
+      const dir = String(entry.Direction);
+      const stops = (entry.Stops||[]).slice().sort((a,b)=>(a.StopSequence||0)-(b.StopSequence||0));
+      const names = stops.map(s=>(s.StopName && (s.StopName.Zh_tw||s.StopName.Zh)) || '').filter(Boolean);
+      if(names.length){
+        byDir[dir] = {
+          direction:dir,
+          names,
+          subRouteName:(entry.SubRouteName && entry.SubRouteName.Zh_tw) || ''
+        };
+      }
+    });
+    return byDir;
+  }
+
+  function directionButtonLabel(dirInfo, dirKey){
+    if(!dirInfo || !dirInfo.names || !dirInfo.names.length){
+      return dirKey==='2' ? '環狀路線' : ('方向 '+dirKey);
+    }
+    return '往' + dirInfo.names[dirInfo.names.length-1];
+  }
+
+  // 供內嵌 onclick 安全帶入物件參數：JSON 字串本身沒有單引號，
+  // 但保險起見還是把可能出現的單引號轉成 HTML 實體，避免提早截斷屬性
+  function jsAttr(obj){ return JSON.stringify(obj).replace(/'/g, '&#39;'); }
+
+  const STOP_STATUS_TEXT = {
+    0:null,           // 正常，顯示倒數
+    1:'尚未發車',
+    2:'交管不停靠',
+    3:'末班車已過',
+    4:'今日未營運'
+  };
+
+  function pickEstimateSeconds(item){
+    if(typeof item.EstimateTime==='number') return item.EstimateTime;
+    if(Array.isArray(item.Estimates) && item.Estimates.length && typeof item.Estimates[0].EstimateTime==='number'){
+      return item.Estimates[0].EstimateTime;
+    }
+    return null;
+  }
+
+  async function refreshArrivals(manual){
+    const displayed = getDisplayedRoutes();
+    if(displayed.length===0){ arrivalsData={}; lastErrors=[]; renderHome(); return; }
+    loading = true;
+    renderHome();
+    const groups = {};
+    displayed.forEach(r=>{
+      const key = r.city+'|'+r.routeName;
+      (groups[key] = groups[key] || []).push(r);
+    });
+    const errors = [];
+    const results = {};
+    await Promise.all(Object.keys(groups).map(async key=>{
+      const [city, routeName] = key.split('|');
+      const routeDefs = groups[key];
+      try{
+        const data = await fetchRouteEta(city, routeName);
+        routeDefs.forEach(rd=>{
+          const matched = (Array.isArray(data)?data:[]).filter(item=>{
+            const stopZh = (item.StopName && (item.StopName.Zh_tw || item.StopName.Zh)) || '';
+            const stopOk = !rd.stopKeyword || stopZh.indexOf(rd.stopKeyword) !== -1;
+            const dirOk = rd.direction==='both' || String(item.Direction)===String(rd.direction);
+            return stopOk && dirOk;
+          });
+          results[rd.id] = matched;
+        });
+      }catch(e){
+        errors.push(e.message);
+        routeDefs.forEach(rd=> results[rd.id]=null);
+      }
+    }));
+    arrivalsData = results;
+    lastErrors = errors;
+    lastUpdated = new Date();
+    loading = false;
+    renderHome();
+  }
+
+  function resetRefreshTimer(){
+    if(refreshTimer) clearInterval(refreshTimer);
+    const secs = Math.max(15, Number(settings.refreshSeconds)||30);
+    refreshTimer = setInterval(()=>App.refreshArrivals(), secs*1000);
+  }
+
+  // ---------------- 畫面渲染：頂部狀態列 ----------------
+  function renderTop(){
+    const chipsEl = document.getElementById('tagChips');
+    const items = [{id:null, label:'自動'}, ...tags.map(t=>({id:t.id, label:t.name}))];
+    chipsEl.innerHTML = items.map(it=>{
+      const selected = (manualTagId||null) === it.id;
+      const gpsActive = it.id!==null && !manualTagId && activeTagIds.includes(it.id);
+      return '<div class="chip'+(selected?' selected':'')+'" onclick=\'App.selectTag('+JSON.stringify(it.id)+')\'>'
+        + escapeHtml(it.label) + (gpsActive?'<span class="dot"></span>':'') + '</div>';
+    }).join('');
+
+    const note = document.getElementById('geoNote');
+    if(geoStatus==='denied'){
+      note.style.display='block';
+      note.textContent = '定位權限被拒絕，已切換為手動模式，請直接點選上方地點標籤。若要恢復自動偵測，可點網址列左側的鎖頭/資訊圖示把「位置」改成允許，再重新整理頁面。';
+    }else if(geoStatus==='unsupported'){
+      note.style.display='block';
+      note.textContent = '這個瀏覽器不支援定位，請手動點選地點標籤。';
+    }else{
+      note.style.display='none';
+    }
+  }
+
+  // ---------------- 畫面渲染：首頁看板 ----------------
+  function renderHome(){
+    const content = document.getElementById('homeContent');
+    const updatedText = document.getElementById('updatedText');
+    const errorBanner = document.getElementById('errorBanner');
+
+    updatedText.textContent = loading ? '更新中…' : (lastUpdated ? ('上次更新 ' + lastUpdated.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'})) : '尚未更新');
+
+    errorBanner.innerHTML = lastErrors.length
+      ? '<div class="error-banner">部分資料取得失敗：'+escapeHtml(lastErrors.join('；'))+'</div>'
+      : '';
+
+    const displayed = getDisplayedRoutes();
+
+    if(displayed.length===0 && !sessionShowAll){
+      content.innerHTML =
+        '<div class="empty">'
+        + '<div class="big">目前地點沒有指定要顯示的公車</div>'
+        + (tags.length===0
+            ? '前往「地點標籤」建立第一個地點，再到「公車路線」把公車指定給它。'
+            : '目前不在任何地點標籤的範圍內，可以先看全部公車，或用上方標籤手動切換。')
+        + '<br><button onclick="App.showAllOnce()">先顯示全部公車</button>'
+        + '</div>';
+      return;
+    }
+
+    if(displayed.length===0 && sessionShowAll && routes.length===0){
+      content.innerHTML = '<div class="empty"><div class="big">還沒有新增任何公車路線</div>到「公車路線」分頁新增第一筆吧。</div>';
+      return;
+    }
+
+    // 依最快到站時間排序
+    const rows = displayed.map(r=>{
+      const matched = arrivalsData[r.id];
+      let best = null; // {seconds, statusText, subLabel}
+      if(matched === null){
+        best = {seconds:null, statusText:'資料取得失敗', sub:''};
+      }else if(!matched || matched.length===0){
+        best = {seconds:null, statusText:'查無資料', sub:''};
+      }else{
+        const withTime = matched
+          .map(m=>({item:m, sec: (STOP_STATUS_TEXT[m.StopStatus]===null || m.StopStatus===undefined) ? pickEstimateSeconds(m) : null, statusOverride: STOP_STATUS_TEXT[m.StopStatus]}))
+          .sort((a,b)=>{
+            if(a.sec===null && b.sec===null) return 0;
+            if(a.sec===null) return 1;
+            if(b.sec===null) return -1;
+            return a.sec - b.sec;
+          });
+        const top = withTime[0];
+        const subRoute = (top.item.SubRouteName && (top.item.SubRouteName.Zh_tw||top.item.SubRouteName.En)) || '';
+        best = {
+          seconds: top.sec,
+          statusText: top.statusOverride || (top.sec===null ? '無時刻資料' : null),
+          sub: subRoute
+        };
+      }
+      return {route:r, best};
+    }).sort((a,b)=>{
+      const as=a.best.seconds, bs=b.best.seconds;
+      if(as===null && bs===null) return 0;
+      if(as===null) return 1;
+      if(bs===null) return -1;
+      return as-bs;
+    });
+
+    content.innerHTML =
+      (sessionShowAll ? '<div class="hint" style="margin-bottom:10px;">目前顯示全部公車，切換地點標籤後會恢復依標籤篩選。</div>' : '')
+      + '<div class="board">' + rows.map(({route:r, best})=>{
+        let rightHtml;
+        if(best.seconds!==null){
+          const mins = Math.round(best.seconds/60);
+          const soon = mins <= 3;
+          const label = mins < 1 ? '進站中' : (mins + '<span class="unit">分</span>');
+          rightHtml = '<div class="countdown'+(soon?' soon':'')+'">'+label+'</div>';
+        }else{
+          rightHtml = '<div class="countdown muted">'+escapeHtml(best.statusText||'—')+'</div>';
+        }
+        return '<div class="row">'
+          + '<div class="left">'
+            + '<div class="route-label">'+escapeHtml(routeDisplayLabel(r))+'</div>'
+            + '<div class="route-sub">'+escapeHtml([r.city, r.stopKeyword].filter(Boolean).join(' · '))+(best.sub?(' · '+escapeHtml(best.sub)):'')+'</div>'
+          + '</div>'
+          + '<div class="right">'+rightHtml+'</div>'
+          + '</div>';
+      }).join('') + '</div>';
+  }
+
+  // ---------------- 畫面渲染：地點標籤管理 ----------------
+  function renderTagList(){
+    const el = document.getElementById('tagList');
+    if(tags.length===0){
+      el.innerHTML = '<p class="hint">還沒有任何地點標籤。</p>';
+      return;
+    }
+    el.innerHTML = tags.map(t=>{
+      const usedBy = routes.filter(r=>(r.tagIds||[]).includes(t.id)).length;
+      return '<div class="card">'
+        + '<div class="card-top">'
+          + '<div><div class="card-title">'+escapeHtml(t.name)+'</div>'
+          + '<div class="card-meta">半徑 '+t.radius+' 公尺 · 座標 '+t.lat.toFixed(5)+', '+t.lng.toFixed(5)+'<br>'+usedBy+' 條路線使用中</div></div>'
+          + '<div class="card-actions">'
+            + '<button class="icon-btn" onclick=\'App.showTagForm('+JSON.stringify(t.id)+')\'>編輯</button>'
+            + '<button class="icon-btn danger" onclick=\'App.deleteTag('+JSON.stringify(t.id)+')\'>刪除</button>'
+          + '</div>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function tagFormHtml(existing){
+    const t = existing || {name:'', radius:250, lat:null, lng:null};
+    return '<div class="form">'
+      + '<div class="field"><label>名稱</label><input type="text" id="tfName" value="'+escapeAttr(t.name)+'" placeholder="例如：學校 / 家裡"></div>'
+      + '<div class="row2">'
+        + '<div class="field"><label>緯度 lat</label><input type="number" step="0.000001" id="tfLat" value="'+(t.lat??'')+'"></div>'
+        + '<div class="field"><label>經度 lng</label><input type="number" step="0.000001" id="tfLng" value="'+(t.lng??'')+'"></div>'
+      + '</div>'
+      + '<button class="icon-btn primary" id="tfLocateBtn" style="margin-bottom:6px;" onclick="App.useCurrentLocation()">使用目前位置設為錨點</button>'
+      + '<div class="hint" id="tfLocateStatus" style="margin-bottom:10px;"></div>'
+      + '<div class="field"><label>判定半徑（公尺）</label><input type="number" id="tfRadius" value="'+t.radius+'"></div>'
+      + '<div class="form-actions">'
+        + '<button class="btn primary" onclick="App.saveTag()">儲存</button>'
+        + '<button class="btn ghost" onclick="App.cancelTagForm()">取消</button>'
+      + '</div></div>';
+  }
+
+  // ---------------- 畫面渲染：公車路線管理 ----------------
+  function renderRouteList(){
+    const el = document.getElementById('routeList');
+    if(routes.length===0){
+      el.innerHTML = '<p class="hint">還沒有任何公車路線。</p>';
+      return;
+    }
+    el.innerHTML = routes.map(r=>{
+      const tagNames = (r.tagIds||[]).map(id=>{
+        const t = tags.find(x=>x.id===id);
+        return t ? t.name : null;
+      }).filter(Boolean);
+      const dirLabel = r.direction==='both' ? '雙向' : (r.directionLabel || ('方向 '+r.direction));
+      return '<div class="card">'
+        + '<div class="card-top">'
+          + '<div><div class="card-title">'+escapeHtml(routeDisplayLabel(r))+'</div>'
+          + '<div class="card-meta">'+escapeHtml(r.city)+' · '+dirLabel
+          + (r.stopKeyword?(' · 站名含「'+escapeHtml(r.stopKeyword)+'」'):'')
+          + '<br>'+(tagNames.length? tagNames.map(n=>'<span class="tag-pill">'+escapeHtml(n)+'</span>').join('') : '<span style="color:var(--muted)">尚未指定地點標籤</span>')
+          + '</div></div>'
+          + '<div class="card-actions">'
+            + '<button class="icon-btn" onclick=\'App.testRoute('+JSON.stringify(r.id)+')\'>測試</button>'
+            + '<button class="icon-btn" onclick=\'App.showRouteForm('+JSON.stringify(r.id)+')\'>編輯</button>'
+            + '<button class="icon-btn danger" onclick=\'App.deleteRoute('+JSON.stringify(r.id)+')\'>刪除</button>'
+          + '</div>'
+        + '</div>'
+        + '<div class="card-meta" id="routeTest-'+r.id+'"></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  const CITY_OPTIONS = ['Taipei','NewTaipei','Taoyuan','Taichung','Tainan','Kaohsiung','Keelung','HsinchuCity','HsinchuCounty','ChanghuaCounty','YunlinCounty','PingtungCounty','YilanCounty','HualienCounty','TaitungCounty'];
+
+  // ---- 新增路線表單：搜尋選路線 → 依真實站牌資料挑方向/站牌 ----
+
+  function routeFormHtml(){
+    return '<div class="form">'
+      + '<div class="field"><label>縣市代碼</label>'
+        + '<input type="text" id="rfCity" list="cityList" value="'+escapeAttr(rfState.city)+'" oninput="App.onCityChange(this.value)">'
+        + '<datalist id="cityList">'+CITY_OPTIONS.map(c=>'<option value="'+c+'">').join('')+'</datalist>'
+      + '</div>'
+      + '<div class="field"><label>公車路線</label><div id="rfRouteSearchWrap">'+renderRouteSearchAreaHtml()+'</div></div>'
+      + '<div class="field"><label>方向</label><div id="rfDirectionArea">'+renderDirectionAreaHtml()+'</div></div>'
+      + '<div id="rfStopAreaWrap">'+renderStopAreaHtml()+'</div>'
+      + '<div class="field"><label>要在哪些地點標籤顯示</label><div class="checks" id="rfTagChecks">'
+        + (tags.length===0 ? '<span class="hint">尚未建立任何地點標籤</span>' : tags.map(t=>{
+            const on = (rfState.tagIds||[]).includes(t.id);
+            return '<div class="check'+(on?' on':'')+'" data-tag="'+t.id+'" onclick="App.toggleRouteTag(this,\''+t.id+'\')">'+escapeHtml(t.name)+'</div>';
+          }).join(''))
+      + '</div></div>'
+      + '<div class="form-actions">'
+        + '<button class="btn primary" onclick="App.saveRoute()">儲存</button>'
+        + '<button class="btn ghost" onclick="App.cancelRouteForm()">取消</button>'
+      + '</div></div>';
+  }
+
+  function renderRouteSearchAreaHtml(){
+    const s = rfState;
+    if(s.selectedRoute){
+      return '<div class="card" style="padding:10px 12px;">'
+        + '<div class="card-top">'
+          + '<div><div class="card-title">'+escapeHtml(s.selectedRoute.routeName)+'</div>'
+          + (s.selectedRoute.departureZh || s.selectedRoute.destinationZh
+              ? '<div class="card-meta">'+escapeHtml(s.selectedRoute.departureZh)+' ↔ '+escapeHtml(s.selectedRoute.destinationZh)+'</div>'
+              : '')
+          + '</div>'
+          + '<button class="icon-btn" onclick="App.changeRouteSelection()">變更</button>'
+        + '</div></div>';
+    }
+    return '<input type="text" id="rfRouteQuery" value="'+escapeAttr(s.query)+'" placeholder="輸入路線號碼搜尋，例如 657" oninput="App.onRouteQueryInput(this.value)" autocomplete="off">'
+      + '<div id="rfRouteResults">'+renderRouteResultsHtml()+'</div>';
+  }
+
+  function renderRouteResultsHtml(){
+    const s = rfState;
+    if(!s.query || !s.query.trim()) return '';
+    if(s.searching) return '<div class="hint">搜尋中…</div>';
+    const fallbackBtn = '<button class="icon-btn" style="margin-top:6px;" onclick=\'App.selectRouteResult('
+      + jsAttr({routeName:s.query.trim(), departureZh:'', destinationZh:''}) + ')\'>找不到？直接用「'+escapeHtml(s.query.trim())+'」當作路線名稱</button>';
+    if(s.searchError){
+      return '<div class="hint" style="color:var(--danger)">搜尋失敗：'+escapeHtml(s.searchError)+'</div>' + fallbackBtn;
+    }
+    if(!s.results || s.results.length===0){
+      return '<div class="hint">查無符合的路線。</div>' + fallbackBtn;
+    }
+    return '<div class="board" style="margin-top:6px;">' + s.results.map(item=>{
+      const zh = (item.RouteName && item.RouteName.Zh_tw) || '';
+      const dep = item.DepartureStopNameZh || '', dest = item.DestinationStopNameZh || '';
+      const payload = {routeName:zh, departureZh:dep, destinationZh:dest};
+      return '<div class="row" style="cursor:pointer;" onclick=\'App.selectRouteResult('+jsAttr(payload)+')\'>'
+        + '<div class="left"><div class="route-label">'+escapeHtml(zh)+'</div>'
+        + (dep||dest ? '<div class="route-sub">'+escapeHtml(dep)+' → '+escapeHtml(dest)+'</div>' : '')
+        + '</div></div>';
+    }).join('') + '</div>' + fallbackBtn;
+  }
+
+  function renderDirectionAreaHtml(){
+    const s = rfState;
+    if(!s.selectedRoute){
+      return '<div class="hint">先選好路線，才能看到實際的往○○方向。</div>';
+    }
+    if(s.stopsLoading){
+      return '<div class="checks">'+directionChipHtml('both','雙向都顯示','')+'</div><div class="hint">讀取方向資料中…</div>';
+    }
+    const keys = s.stopsByDirection ? Object.keys(s.stopsByDirection).sort((a,b)=>Number(a)-Number(b)) : [];
+    let chips = directionChipHtml('both','雙向都顯示','');
+    if(keys.length){
+      keys.forEach(k=>{
+        const label = directionButtonLabel(s.stopsByDirection[k], k);
+        chips += directionChipHtml(k, label, label);
+      });
+    }else{
+      chips += directionChipHtml('0','方向 0（去程）','') + directionChipHtml('1','方向 1（返程）','');
+    }
+    let html = '<div class="checks">'+chips+'</div>';
+    if(s.stopsError){
+      html += '<div class="hint" style="color:var(--danger)">方向／站牌資料讀取失敗：'+escapeHtml(s.stopsError)+'，可以先用上面的通用選項，或到下面手動輸入站名關鍵字。</div>';
+    }
+    return html;
+  }
+
+  function directionChipHtml(key, text, labelForSave){
+    const on = rfState.direction === key;
+    return '<div class="check'+(on?' on':'')+'" onclick=\'App.setDirection('+jsAttr(key)+','+jsAttr(labelForSave)+')\'>'+escapeHtml(text)+'</div>';
+  }
+
+  function candidateStopNames(){
+    const s = rfState;
+    if(!s.stopsByDirection) return null;
+    let names = [];
+    if(s.direction==='both'){
+      Object.values(s.stopsByDirection).forEach(d=>{ names = names.concat(d.names); });
+    }else{
+      const d = s.stopsByDirection[s.direction];
+      names = d ? d.names.slice() : [];
+    }
+    const seen = new Set(), uniq = [];
+    names.forEach(n=>{ if(!seen.has(n)){ seen.add(n); uniq.push(n); } });
+    return uniq;
+  }
+
+  function renderStopAreaHtml(){
+    const s = rfState;
+    if(!s.selectedRoute){
+      return '';
+    }
+    const candidates = candidateStopNames();
+    const selectedChip = s.stopKeyword
+      ? '<div class="tag-pill" style="margin-bottom:6px;">已選站牌：'+escapeHtml(s.stopKeyword)+' <span style="cursor:pointer" onclick="App.clearStopKeyword()">✕</span></div>'
+      : '';
+    if(candidates === null){
+      // 站牌資料還沒載入或讀取失敗，退回手動輸入關鍵字
+      return '<div class="field"><label>站牌名稱關鍵字（選填，尚無站牌清單，可手動輸入）</label>'
+        + selectedChip
+        + '<input type="text" id="rfStopManual" value="'+escapeAttr(s.stopKeyword)+'" placeholder="例如：三張犁" oninput="App.onStopManualInput(this.value)"></div>';
+    }
+    return '<div class="field"><label>站牌名稱（選填，搜尋後點選，留空代表不篩選站牌）</label>'
+      + selectedChip
+      + '<input type="text" id="rfStopQuery" value="'+escapeAttr(s.stopQuery)+'" placeholder="輸入站名關鍵字" oninput="App.onStopQueryInput(this.value)" autocomplete="off">'
+      + '<div id="rfStopResults">'+renderStopResultsHtml()+'</div>'
+      + '</div>';
+  }
+
+  function renderStopResultsHtml(){
+    const s = rfState;
+    const all = candidateStopNames() || [];
+    const q = (s.stopQuery||'').trim();
+    const filtered = q ? all.filter(n=>n.includes(q)) : all;
+    const shown = filtered.slice(0,20);
+    if(shown.length===0){
+      return '<div class="hint">沒有符合的站牌'+(q?'':'（這條路線尚無站牌資料）')+'</div>';
+    }
+    return '<div class="board" style="margin-top:6px;max-height:220px;overflow:auto;">' + shown.map(n=>
+      '<div class="row" style="cursor:pointer;padding:8px 12px;" onclick=\'App.selectStop('+jsAttr(n)+')\'>'+escapeHtml(n)+'</div>'
+    ).join('') + '</div>'
+    + (filtered.length>20 ? '<div class="hint">還有 '+(filtered.length-20)+' 筆，輸入更多關鍵字可縮小範圍。</div>' : '');
+  }
+
+  function refreshRouteFormSections(){
+    const a = document.getElementById('rfRouteSearchWrap'); if(a) a.innerHTML = renderRouteSearchAreaHtml();
+    const b = document.getElementById('rfDirectionArea'); if(b) b.innerHTML = renderDirectionAreaHtml();
+    const c = document.getElementById('rfStopAreaWrap'); if(c) c.innerHTML = renderStopAreaHtml();
+  }
+
+  async function loadStopsForSelectedRoute(){
+    const s = rfState;
+    if(!s || !s.selectedRoute) return;
+    s.stopsLoading = true; s.stopsError = null;
+    refreshRouteFormSections();
+    try{
+      const data = await fetchStopsOfRoute(s.city, s.selectedRoute.routeName);
+      s.stopsByDirection = extractStopsByDirection(data);
+    }catch(e){
+      s.stopsByDirection = null;
+      s.stopsError = e.message;
+    }
+    s.stopsLoading = false;
+    if(rfState === s) refreshRouteFormSections(); // 表單可能已被關閉/切換，避免寫到不存在的節點
+  }
+
+  // ---------------- 工具 ----------------
+  function escapeHtml(s){
+    return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  // 顯示名稱固定就是路線名，若有指定單一方向就加註「往○○」
+  function routeDisplayLabel(r){
+    return r.routeName + (r.directionLabel ? '（'+r.directionLabel+'）' : '');
+  }
+
+  function updateClock(){
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  // ---------------- App 對外方法（供 inline onclick 呼叫） ----------------
+  const App = {
+
+    switchView(name){
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.getElementById('view-'+name).classList.add('active');
+      document.querySelectorAll('nav.bottom button').forEach(b=>{
+        b.classList.toggle('active', b.dataset.view===name);
+      });
+      if(name==='tags') renderTagList();
+      if(name==='routes') renderRouteList();
+    },
+
+    selectTag(id){
+      manualTagId = id;
+      saveJSON('bustag.manualTagId', manualTagId);
+      recomputeActive();
+    },
+
+    showAllOnce(){
+      sessionShowAll = true;
+      App.refreshArrivals();
+    },
+
+    refreshArrivals(){ refreshArrivals(); },
+
+    // ---- 標籤 ----
+    showTagForm(id){
+      editingTagId = id || null;
+      const existing = id ? tags.find(t=>t.id===id) : null;
+      document.getElementById('tagFormHolder').innerHTML = tagFormHtml(existing);
+      checkGeoPermissionState().then(state=>{
+        const s = document.getElementById('tfLocateStatus');
+        if(!s) return;
+        if(state==='denied'){
+          s.style.color = 'var(--danger)';
+          s.textContent = '瀏覽器已封鎖這個網站的定位權限，按「使用目前位置」也不會有反應。請點網址列左側的鎖頭/資訊圖示，把「位置」改成允許，再重新整理頁面。';
+        }
+      });
+    },
+    cancelTagForm(){
+      editingTagId = null;
+      document.getElementById('tagFormHolder').innerHTML = '';
+    },
+    useCurrentLocation(){
+      if(!('geolocation' in navigator)){ alert('此瀏覽器不支援定位'); return; }
+      const setStatus = (msg, isErr)=>{
+        const s=document.getElementById('tfLocateStatus');
+        if(!s) return;
+        s.textContent = msg;
+        s.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+      };
+      setStatus('定位中…（室內、第一次定位可能要 20～30 秒，請耐心等候）', false);
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const latEl = document.getElementById('tfLat'), lngEl = document.getElementById('tfLng');
+        if(!latEl || !lngEl) return; // 表單已關閉就不處理，避免噴錯
+        latEl.value = pos.coords.latitude.toFixed(6);
+        lngEl.value = pos.coords.longitude.toFixed(6);
+        setStatus('已取得目前位置。', false);
+      }, err=>{
+        if(err.code === 1){
+          setStatus('瀏覽器已封鎖這個網站的定位權限，不管等多久都不會成功。請點網址列左側的鎖頭/資訊圖示，把「位置」改成允許，重新整理頁面後再試一次。', true);
+        }else if(err.code === 2){
+          setStatus('目前定位不到，請確認手機的定位服務（GPS）已開啟，或移動到訊號較好的地方再試。', true);
+        }else{
+          setStatus('定位逾時（'+err.message+'）。可以再按一次重試；有時定位其實還在背景進行，稍等一下欄位可能還是會自動填上。', true);
+        }
+      }, {enableHighAccuracy:true, timeout:25000, maximumAge:0});
+    },
+    saveTag(){
+      const name = document.getElementById('tfName').value.trim();
+      const lat = parseFloat(document.getElementById('tfLat').value);
+      const lng = parseFloat(document.getElementById('tfLng').value);
+      const radius = parseInt(document.getElementById('tfRadius').value, 10) || 250;
+      if(!name){ alert('請輸入名稱'); return; }
+      if(isNaN(lat) || isNaN(lng)){ alert('請輸入座標，或按「使用目前位置」'); return; }
+      if(editingTagId){
+        const t = tags.find(x=>x.id===editingTagId);
+        Object.assign(t, {name, lat, lng, radius});
+      }else{
+        tags.push({id:uid(), name, lat, lng, radius});
+      }
+      saveJSON('bustag.tags', tags);
+      editingTagId = null;
+      document.getElementById('tagFormHolder').innerHTML = '';
+      renderTagList();
+      renderTop();
+      recomputeActive();
+    },
+    deleteTag(id){
+      if(!confirm('確定要刪除這個地點標籤嗎？相關路線的標籤指定也會一併移除。')) return;
+      tags = tags.filter(t=>t.id!==id);
+      routes.forEach(r=>{ r.tagIds = (r.tagIds||[]).filter(tid=>tid!==id); });
+      if(manualTagId===id) { manualTagId=null; saveJSON('bustag.manualTagId', null); }
+      saveJSON('bustag.tags', tags);
+      saveJSON('bustag.routes', routes);
+      renderTagList();
+      renderTop();
+      recomputeActive();
+    },
+
+    // ---- 路線 ----
+    showRouteForm(id){
+      editingRouteId = id || null;
+      const existing = id ? routes.find(r=>r.id===id) : null;
+      rfState = {
+        city: existing ? existing.city : 'Taipei',
+        query:'', results:[], searching:false, searchError:null,
+        selectedRoute: existing ? {routeName:existing.routeName, departureZh:'', destinationZh:''} : null,
+        stopsByDirection:null, stopsLoading:false, stopsError:null,
+        direction: existing ? existing.direction : 'both',
+        directionLabel: existing ? (existing.directionLabel||'') : '',
+        stopKeyword: existing ? (existing.stopKeyword||'') : '',
+        stopQuery:'',
+        tagIds: existing ? (existing.tagIds||[]).slice() : []
+      };
+      document.getElementById('routeFormHolder').innerHTML = routeFormHtml();
+      if(rfState.selectedRoute) loadStopsForSelectedRoute();
+    },
+    cancelRouteForm(){
+      editingRouteId = null;
+      rfState = null;
+      document.getElementById('routeFormHolder').innerHTML = '';
+    },
+    toggleRouteTag(el, tagId){
+      el.classList.toggle('on');
+    },
+    onCityChange(value){
+      if(!rfState) return;
+      rfState.city = value;
+      if(rfState.query && rfState.query.trim()) App.onRouteQueryInput(rfState.query);
+    },
+    onRouteQueryInput(value){
+      if(!rfState) return;
+      rfState.query = value;
+      clearTimeout(rfSearchTimer);
+      const resultsEl = document.getElementById('rfRouteResults');
+      if(!value || !value.trim()){
+        rfState.results = []; rfState.searchError = null; rfState.searching = false;
+        if(resultsEl) resultsEl.innerHTML = renderRouteResultsHtml();
+        return;
+      }
+      rfState.searching = true;
+      if(resultsEl) resultsEl.innerHTML = renderRouteResultsHtml();
+      const city = rfState.city, query = value.trim();
+      rfSearchTimer = setTimeout(async ()=>{
+        try{
+          const data = await searchRoutesByKeyword(city, query);
+          if(!rfState || rfState.query.trim() !== query) return; // 使用者已經輸入別的字了
+          rfState.results = Array.isArray(data) ? data : [];
+          rfState.searchError = null;
+        }catch(e){
+          if(!rfState) return;
+          rfState.results = [];
+          rfState.searchError = e.message;
+        }
+        rfState.searching = false;
+        const el = document.getElementById('rfRouteResults');
+        if(el) el.innerHTML = renderRouteResultsHtml();
+      }, 450);
+    },
+    selectRouteResult(payload){
+      if(!rfState) return;
+      rfState.selectedRoute = payload;
+      rfState.query = ''; rfState.results = []; rfState.searchError = null;
+      rfState.direction = 'both'; rfState.directionLabel = '';
+      rfState.stopKeyword = ''; rfState.stopQuery = '';
+      rfState.stopsByDirection = null; rfState.stopsError = null;
+      refreshRouteFormSections();
+      loadStopsForSelectedRoute();
+    },
+    changeRouteSelection(){
+      if(!rfState) return;
+      rfState.selectedRoute = null;
+      rfState.stopsByDirection = null; rfState.stopsError = null; rfState.stopsLoading = false;
+      rfState.direction = 'both'; rfState.directionLabel = '';
+      rfState.stopKeyword = ''; rfState.stopQuery = '';
+      rfState.query = ''; rfState.results = [];
+      refreshRouteFormSections();
+    },
+    setDirection(key, labelForSave){
+      if(!rfState) return;
+      rfState.direction = key;
+      rfState.directionLabel = key==='both' ? '' : (labelForSave||'');
+      const b = document.getElementById('rfDirectionArea'); if(b) b.innerHTML = renderDirectionAreaHtml();
+      const c = document.getElementById('rfStopAreaWrap'); if(c) c.innerHTML = renderStopAreaHtml();
+    },
+    onStopQueryInput(value){
+      if(!rfState) return;
+      rfState.stopQuery = value;
+      const el = document.getElementById('rfStopResults');
+      if(el) el.innerHTML = renderStopResultsHtml();
+    },
+    onStopManualInput(value){
+      if(!rfState) return;
+      rfState.stopKeyword = value;
+    },
+    selectStop(name){
+      if(!rfState) return;
+      rfState.stopKeyword = name;
+      rfState.stopQuery = '';
+      const c = document.getElementById('rfStopAreaWrap'); if(c) c.innerHTML = renderStopAreaHtml();
+    },
+    clearStopKeyword(){
+      if(!rfState) return;
+      rfState.stopKeyword = '';
+      const c = document.getElementById('rfStopAreaWrap'); if(c) c.innerHTML = renderStopAreaHtml();
+    },
+    saveRoute(){
+      const s = rfState;
+      if(!s || !s.selectedRoute || !s.selectedRoute.routeName || !s.selectedRoute.routeName.trim()){
+        alert('請先搜尋並選擇一條路線（或用「找不到？直接用⋯」手動指定）');
+        return;
+      }
+      const city = (s.city||'').trim();
+      const routeName = s.selectedRoute.routeName.trim();
+      if(!city){ alert('請輸入縣市代碼'); return; }
+      const tagIds = Array.from(document.querySelectorAll('#rfTagChecks .check.on')).map(el=>el.dataset.tag);
+      const record = {
+        city, routeName,
+        stopKeyword: (s.stopKeyword||'').trim(),
+        direction: s.direction || 'both',
+        directionLabel: (s.direction==='both') ? '' : (s.directionLabel||''),
+        tagIds
+      };
+      if(editingRouteId){
+        const r = routes.find(x=>x.id===editingRouteId);
+        Object.assign(r, record);
+      }else{
+        routes.push(Object.assign({id:uid()}, record));
+      }
+      saveJSON('bustag.routes', routes);
+      editingRouteId = null;
+      rfState = null;
+      document.getElementById('routeFormHolder').innerHTML = '';
+      renderRouteList();
+      App.refreshArrivals();
+    },
+    deleteRoute(id){
+      if(!confirm('確定要刪除這條路線嗎？')) return;
+      routes = routes.filter(r=>r.id!==id);
+      saveJSON('bustag.routes', routes);
+      renderRouteList();
+      App.refreshArrivals();
+    },
+    async testRoute(id){
+      const r = routes.find(x=>x.id===id);
+      const box = document.getElementById('routeTest-'+id);
+      box.textContent = '查詢中…';
+      try{
+        const data = await fetchRouteEta(r.city, r.routeName);
+        const matched = (Array.isArray(data)?data:[]).filter(item=>{
+          const stopZh = (item.StopName && (item.StopName.Zh_tw||item.StopName.Zh)) || '';
+          const stopOk = !r.stopKeyword || stopZh.indexOf(r.stopKeyword)!==-1;
+          const dirOk = r.direction==='both' || String(item.Direction)===String(r.direction);
+          return stopOk && dirOk;
+        });
+        box.textContent = '共取得 '+data.length+' 筆站牌資料，符合目前篩選條件 '+matched.length+' 筆。';
+      }catch(e){
+        box.textContent = '測試失敗：'+e.message;
+      }
+    },
+
+    // ---- 設定 ----
+    saveSettings(){
+      settings.clientId = document.getElementById('setClientId').value.trim();
+      settings.clientSecret = document.getElementById('setClientSecret').value.trim();
+      settings.refreshSeconds = Math.max(15, parseInt(document.getElementById('setInterval').value,10)||30);
+      saveJSON('bustag.settings', settings);
+      saveJSON('bustag.token', null); // 金鑰變更，捨棄舊 token
+      resetRefreshTimer();
+      alert('已儲存設定');
+      App.refreshArrivals();
+    },
+    resetAll(){
+      if(!confirm('這會清除所有地點標籤、公車路線與 API 金鑰設定，且無法復原，確定要繼續嗎？')) return;
+      ['bustag.settings','bustag.tags','bustag.routes','bustag.manualTagId','bustag.token'].forEach(k=>localStorage.removeItem(k));
+      location.reload();
+    }
+  };
+
+  window.App = App;
+
+  // ---------------- 初始化 ----------------
+  document.getElementById('setClientId').value = settings.clientId||'';
+  document.getElementById('setClientSecret').value = settings.clientSecret||'';
+  document.getElementById('setInterval').value = settings.refreshSeconds||30;
+
+  updateClock();
+  setInterval(updateClock, 30000);
+  renderTop();
+  renderHome();
+  activeTagIds = computeActiveTagIds();
+  startGeolocation();
+  resetRefreshTimer();
+  refreshArrivals();
+
+})();
+</script>
+</body>
+</html>
